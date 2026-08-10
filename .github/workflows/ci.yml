@@ -1,0 +1,69 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go vet ./...
+      - run: go test ./...
+      - run: CGO_ENABLED=0 go build -o bin/filekeeper ./cmd/filekeeper
+
+  php-client:
+    runs-on: ubuntu-latest
+    container: php:8.5-cli
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lint
+        run: find clients/php -name '*.php' -exec php -l {} +
+      - name: Instantiate
+        run: |
+          php -r '
+            require "clients/php/src/FilekeeperException.php";
+            require "clients/php/src/Filekeeper.php";
+            new Filekeeper\Filekeeper("http://x", "t", imgproxyUrl: "http://img/");
+            echo "instantiation ok\n";
+          '
+
+  # Full-stack smoke: real filekeeper + garage + imgproxy, driven by the PHP
+  # client. Catches client/server contract drift the unit jobs cannot.
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate .env
+        run: sh scripts/gen-env.sh
+      - name: Start stack
+        run: docker compose up -d --build
+      - name: Wait for filekeeper
+        run: |
+          for i in $(seq 1 60); do
+            curl -fsS http://localhost:8090/healthz && exit 0
+            sleep 2
+          done
+          echo "filekeeper did not become healthy" >&2
+          docker compose ps
+          exit 1
+      - name: Run PHP smoke test
+        run: |
+          set -a; . ./.env; set +a
+          docker run --rm --network host \
+            -v "$PWD/clients/php:/app" \
+            -e FILEKEEPER_URL=http://localhost:8090 \
+            -e FILEKEEPER_TOKEN="${FK_TOKENS#demo:}" \
+            -e FILEKEEPER_SIGN_SECRET="$FK_SIGN_SECRET" \
+            -e IMGPROXY_URL=http://localhost:8081 \
+            -e IMGPROXY_KEY="$IMGPROXY_KEY" \
+            -e IMGPROXY_SALT="$IMGPROXY_SALT" \
+            php:8.5-cli php /app/examples/smoke.php
+      - name: Stack logs on failure
+        if: failure()
+        run: docker compose logs
