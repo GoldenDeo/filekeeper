@@ -1,0 +1,21 @@
+# Garage single-node config for filekeeper (dev/small-prod).
+# Docs: https://garagehq.deuxfleurs.fr/documentation/reference-manual/configuration/
+
+metadata_dir = "/var/lib/garage/meta"
+data_dir = "/var/lib/garage/data"
+db_engine = "sqlite"
+
+replication_factor = 1
+
+rpc_bind_addr = "[::]:3901"
+rpc_public_addr = "garage:3901"
+# CHANGE FOR PRODUCTION: openssl rand -hex 32
+rpc_secret = "9daa4c9ac2cc4ae1e46138f5d2a4d7dd4b2be4bfa73e5babb14b83af4c00d7d1"
+
+[s3_api]
+s3_region = "garage"
+api_bind_addr = "[::]:3900"
+root_domain = ".s3.garage"
+
+[admin]
+api_bind_addr = "[::]:3903"

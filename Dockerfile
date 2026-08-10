@@ -1,0 +1,15 @@
+FROM golang:1.26-alpine AS build
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/filekeeper ./cmd/filekeeper \
+    && mkdir -p /out/data
+
+FROM gcr.io/distroless/static-debian12:nonroot
+COPY --from=build /out/filekeeper /filekeeper
+# Pre-created with nonroot ownership so the named volume inherits writable perms.
+COPY --from=build --chown=nonroot:nonroot /out/data /data
+ENV FK_DATA_DIR=/data
+EXPOSE 8080
+ENTRYPOINT ["/filekeeper"]

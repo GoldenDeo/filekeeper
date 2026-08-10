@@ -1,0 +1,7 @@
+.git
+.idea
+.env
+bin
+data
+README.md
+docker-compose.yml
