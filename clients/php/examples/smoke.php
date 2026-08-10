@@ -93,7 +93,7 @@ if ($appToken = getenv('FILEKEEPER_UPLOAD_TOKEN')) {
 
     $fromApp = $app->uploadString($png, 'from-app.png');
     check(($fromApp['id'] ?? '') !== '', 'upload scope: upload allowed');
-    check(($fromApp['service'] ?? '') === 'demo-app', 'upload scope: attributed to its own service');
+    check(($fromApp['service'] ?? '') === 'demo', 'upload scope: attributed to the shared tenant');
 
     foreach (['delete' => fn() => $app->delete($fromApp['id']),
               'meta' => fn() => $app->meta($fromApp['id'])] as $what => $call) {
@@ -105,7 +105,10 @@ if ($appToken = getenv('FILEKEEPER_UPLOAD_TOKEN')) {
         }
     }
 
-    $fk->delete($fromApp['id']);  // clean up with the full token
+    // The UC-44 shape: the backend's full token deletes what the app uploaded,
+    // which only works because both credentials name the same service.
+    $fk->delete($fromApp['id']);
+    check(true, 'upload scope: backend deletes its app\'s upload');
 }
 
 // rejected type

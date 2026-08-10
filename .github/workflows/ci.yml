@@ -55,13 +55,15 @@ jobs:
       - name: Run PHP smoke test
         run: |
           set -a; . ./.env; set +a
-          # FK_TOKENS holds several service:token[:scope] entries — pick by service.
-          token() { printf '%s' "$FK_TOKENS" | tr ',' '\n' | awk -F: -v s="$1" '$1==s{print $2}'; }
+          # FK_TOKENS entries are service:token[:scope]. Both demo entries share
+          # the service name (a service is a tenant), so pick by scope: an entry
+          # with no third field is the full one.
+          token() { printf '%s' "$FK_TOKENS" | tr ',' '\n' | awk -F: -v s="$1" '$3==s{print $2}'; }
           docker run --rm --network host \
             -v "$PWD/clients/php:/app" \
             -e FILEKEEPER_URL=http://localhost:8090 \
-            -e FILEKEEPER_TOKEN="$(token demo)" \
-            -e FILEKEEPER_UPLOAD_TOKEN="$(token demo-app)" \
+            -e FILEKEEPER_TOKEN="$(token '')" \
+            -e FILEKEEPER_UPLOAD_TOKEN="$(token upload)" \
             -e FILEKEEPER_SIGN_SECRET="$FK_SIGN_SECRET" \
             -e IMGPROXY_URL=http://localhost:8081 \
             -e IMGPROXY_KEY="$IMGPROXY_KEY" \
