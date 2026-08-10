@@ -31,7 +31,6 @@ function fetch(string $url): array
     curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true]);
     $body = curl_exec($ch);
     $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-    curl_close($ch);
 
     return [$status, (string) $body];
 }

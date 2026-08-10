@@ -162,12 +162,9 @@ final readonly class Filekeeper
 
         $body = curl_exec($ch);
         if ($body === false) {
-            $err = curl_error($ch);
-            curl_close($ch);
-            throw new FilekeeperException("transport error: {$err}");
+            throw new FilekeeperException('transport error: ' . curl_error($ch));
         }
         $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-        curl_close($ch);
 
         if ($status !== $expect) {
             $decoded = json_decode((string) $body, true);
