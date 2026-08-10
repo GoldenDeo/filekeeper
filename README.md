@@ -67,9 +67,9 @@ irreversible, while public files are already served to the world at `/f/{id}`.
 |---------------------------|--------------|
 | `POST /v1/files`          | multipart upload; parts: `file` (required), `visibility` = `public` (default) \| `private`. Returns `201` with the file record + `url`. `413` over limit, `415` for disallowed type. Open to `upload` and `full` scopes. |
 | `GET /f/{id}`             | serve the file. Supports `Range`, `If-None-Match`/`ETag` (=sha256), correct `Content-Type`, `nosniff`, inline for media / attachment for the rest. Private files need `?exp=&sig=`. |
-| `GET /v1/files/{id}`      | metadata JSON. |
-| `POST /v1/files/{id}/sign?ttl=300` | mint a signed URL for a private file (ttl ≤ 86400 s). |
-| `DELETE /v1/files/{id}`   | remove the record; blob is deleted when the last record referencing it is gone. `204`. |
+| `GET /v1/files/{id}`      | metadata JSON. Owner-only: another service's file answers `404`. |
+| `POST /v1/files/{id}/sign?ttl=300` | mint a signed URL for a private file (ttl ≤ 86400 s). Owner-only. |
+| `DELETE /v1/files/{id}`   | remove the record; blob is deleted when the last record referencing it is gone. `204`. Owner-only. |
 | `GET /healthz`            | liveness. |
 
 ### Integrating a microservice

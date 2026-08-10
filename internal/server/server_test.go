@@ -420,6 +420,41 @@ func TestBackendDeletesWhatItsAppUploaded(t *testing.T) {
 	}
 }
 
+// Meta and sign follow the same ownership rule as delete: a foreign file is
+// indistinguishable from a missing one. Sign matters most — a signed URL
+// grants access to private content.
+func TestMetaAndSignIsolatedByService(t *testing.T) {
+	ts, _ := newTestServer(t)
+	up := upload(t, ts, pngBytes, "private")
+
+	for _, tc := range []struct{ method, path string }{
+		{"GET", "/v1/files/" + up.ID},
+		{"POST", "/v1/files/" + up.ID + "/sign"},
+	} {
+		req, _ := http.NewRequest(tc.method, ts.URL+tc.path, nil)
+		req.Header.Set("X-Service-Token", testOtherToken)
+		res, err := ts.Client().Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		if res.StatusCode != http.StatusNotFound {
+			t.Errorf("%s %s by another service: got %d, want 404", tc.method, tc.path, res.StatusCode)
+		}
+
+		req, _ = http.NewRequest(tc.method, ts.URL+tc.path, nil)
+		req.Header.Set("X-Service-Token", testToken)
+		res2, err := ts.Client().Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res2.Body.Close()
+		if res2.StatusCode != http.StatusOK {
+			t.Errorf("%s %s by owner: got %d, want 200", tc.method, tc.path, res2.StatusCode)
+		}
+	}
+}
+
 func TestCORS(t *testing.T) {
 	const allowedOrigin = "http://localhost:18080"
 	dir := t.TempDir()

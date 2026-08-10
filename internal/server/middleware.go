@@ -101,6 +101,8 @@ func withCORS(origins []string, next http.Handler) http.Handler {
 		// another.
 		h.Set("Access-Control-Allow-Origin", origin)
 		h.Add("Vary", "Origin")
+		// Without this, fetch() can receive ETag/Content-Range but not read them.
+		h.Set("Access-Control-Expose-Headers", "ETag, Content-Range")
 
 		if r.Method == http.MethodOptions && r.Header.Get("Access-Control-Request-Method") != "" {
 			h.Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")

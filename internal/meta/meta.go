@@ -100,11 +100,16 @@ func (s *Store) Delete(ctx context.Context, id, service string) (File, error) {
 	if err != nil {
 		return File{}, err
 	}
-	if f.Service != service {
-		return File{}, ErrNotFound
-	}
-	if _, err := s.db.ExecContext(ctx, `DELETE FROM files WHERE id = ?`, id); err != nil {
+	// Ownership is enforced by the statement itself, so check-then-delete
+	// cannot race: a foreign or already-deleted row affects 0 rows either way.
+	res, err := s.db.ExecContext(ctx, `DELETE FROM files WHERE id = ? AND service = ?`, id, service)
+	if err != nil {
 		return File{}, fmt.Errorf("delete %s: %w", id, err)
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		return File{}, fmt.Errorf("delete %s: %w", id, err)
+	} else if n == 0 {
+		return File{}, ErrNotFound
 	}
 	return f, nil
 }

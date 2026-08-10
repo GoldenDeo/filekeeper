@@ -14,7 +14,9 @@ import (
 func handleGetMeta(metaStore *meta.Store) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f, err := metaStore.Get(r.Context(), r.PathValue("id"))
-		if errors.Is(err, meta.ErrNotFound) {
+		// A foreign file is reported exactly like a missing one (same rule as
+		// delete): one tenant cannot probe another's ids or read its metadata.
+		if errors.Is(err, meta.ErrNotFound) || (err == nil && f.Service != serviceFrom(r.Context())) {
 			writeError(w, http.StatusNotFound, "not found")
 			return
 		}
@@ -58,11 +60,14 @@ func handleDelete(metaStore *meta.Store, blobs blob.Store, logger *slog.Logger) 
 func handleSign(cfg Config, metaStore *meta.Store) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
-		if _, err := metaStore.Get(r.Context(), id); err != nil {
-			if errors.Is(err, meta.ErrNotFound) {
-				writeError(w, http.StatusNotFound, "not found")
-				return
-			}
+		f, err := metaStore.Get(r.Context(), id)
+		// Signing grants access to private content — the sharpest operation
+		// here — so it is owner-only, with the same 404-for-foreign rule.
+		if errors.Is(err, meta.ErrNotFound) || (err == nil && f.Service != serviceFrom(r.Context())) {
+			writeError(w, http.StatusNotFound, "not found")
+			return
+		}
+		if err != nil {
 			writeError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
