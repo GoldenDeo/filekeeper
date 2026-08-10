@@ -31,7 +31,7 @@ func handleDelete(metaStore *meta.Store, blobs blob.Store, logger *slog.Logger) 
 		ctx := r.Context()
 		id := r.PathValue("id")
 
-		f, err := metaStore.Delete(ctx, id)
+		f, err := metaStore.Delete(ctx, id, serviceFrom(ctx))
 		if errors.Is(err, meta.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not found")
 			return

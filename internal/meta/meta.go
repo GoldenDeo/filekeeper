@@ -91,10 +91,17 @@ func (s *Store) Get(ctx context.Context, id string) (File, error) {
 
 // Delete removes the record and returns it, so the caller can decide whether
 // the underlying blob became unreferenced.
-func (s *Store) Delete(ctx context.Context, id string) (File, error) {
+//
+// Only the service that uploaded a file may delete it. A file owned by someone
+// else is reported as ErrNotFound rather than a distinct error, so one service
+// cannot probe for another's file ids.
+func (s *Store) Delete(ctx context.Context, id, service string) (File, error) {
 	f, err := s.Get(ctx, id)
 	if err != nil {
 		return File{}, err
+	}
+	if f.Service != service {
+		return File{}, ErrNotFound
 	}
 	if _, err := s.db.ExecContext(ctx, `DELETE FROM files WHERE id = ?`, id); err != nil {
 		return File{}, fmt.Errorf("delete %s: %w", id, err)

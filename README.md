@@ -47,12 +47,21 @@ curl http://localhost:8090/f/f_…          # serves the file
 All `/v1/*` endpoints require `X-Service-Token: <token>` (one token per
 consuming service, configured in `FK_TOKENS`). `/f/{id}` is public.
 
+A **service is a tenant; a token is one credential into it.** Several tokens may
+name the same service — that is the intended shape: give the backend a `full`
+token and its client app an `upload` one under the *same* service name, so the
+backend can delete what its app uploaded.
+
 Each token carries a **scope**: `full` (default) reaches every endpoint, while
 `upload` may only `POST /v1/files` — anything that reads or destroys answers
-`403`. Give backends a full token and client apps an upload-scoped one: a token
-shipped inside an app is readable by anyone holding the binary, and an
-upload-scoped leak costs disk space, not data. Note there is no per-service
-ownership check — a full token reaches **every** file of **every** service.
+`403`. A token shipped inside an app is readable by anyone holding the binary,
+so an upload-scoped leak costs disk space, not data.
+
+**Deletion is bounded by ownership**: a service may only delete files it
+uploaded; someone else's file answers `404` (not `403`, so ids cannot be
+probed). Reading is not bounded — a full token can read the metadata of any
+file, and `sign` any private one. That asymmetry is deliberate: deletion is
+irreversible, while public files are already served to the world at `/f/{id}`.
 
 | Method & path             | What it does |
 |---------------------------|--------------|
@@ -66,8 +75,10 @@ ownership check — a full token reaches **every** file of **every** service.
 ### Integrating a microservice
 
 1. Get a token: add `myservice:tok_…` to `FK_TOKENS`. If the file is uploaded
-   by your client app rather than your backend, give the app its own
-   upload-scoped token: `myservice-app:tok_…:upload`.
+   by your client app rather than your backend, add a second token under the
+   **same service name**: `myservice:tok_…:upload`. Same tenant, narrower
+   credential — a different name here would make the backend unable to delete
+   its own app's uploads.
 2. On upload, `POST /v1/files`, store **only** `id` from the response.
 3. To show the file, render `<base>/f/<id>` (public) or sign it (private).
 4. On entity deletion, `DELETE /v1/files/<id>` (needs the full token).

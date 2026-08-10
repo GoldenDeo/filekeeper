@@ -26,8 +26,12 @@ var pngBytes = []byte{
 }
 
 const (
+	// A service is a tenant; a token is one credential into it. The backend
+	// and its client app share the service name and differ only in scope —
+	// that is what lets the backend delete what the app uploaded.
 	testToken       = "tok_test"
 	testUploadToken = "tok_upload_only"
+	testOtherToken  = "tok_other_service"
 )
 
 func newTestServer(t *testing.T) (*httptest.Server, *blob.Memory) {
@@ -47,7 +51,8 @@ func newTestServer(t *testing.T) (*httptest.Server, *blob.Memory) {
 		AllowedMIME:    map[string]bool{"image/png": true, "image/gif": true},
 		Tokens: map[string]Token{
 			testToken:       {Service: "testsvc", Scope: ScopeFull},
-			testUploadToken: {Service: "testapp", Scope: ScopeUpload},
+			testUploadToken: {Service: "testsvc", Scope: ScopeUpload},
+			testOtherToken:  {Service: "othersvc", Scope: ScopeFull},
 		},
 		SignSecret: []byte("0123456789abcdef0123456789abcdef"),
 	}, metaStore, blobs, slog.New(slog.DiscardHandler))
@@ -309,8 +314,8 @@ func TestUploadScopeMayOnlyUpload(t *testing.T) {
 	if err := json.NewDecoder(res.Body).Decode(&up); err != nil {
 		t.Fatal(err)
 	}
-	if up.Service != "testapp" {
-		t.Errorf("service: got %q, want testapp", up.Service)
+	if up.Service != "testsvc" {
+		t.Errorf("service: got %q, want testsvc (the app shares its backend's tenant)", up.Service)
 	}
 
 	// Everything that reads or destroys is closed to it.
@@ -341,6 +346,77 @@ func TestUploadScopeMayOnlyUpload(t *testing.T) {
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
 		t.Errorf("file after refused delete: got %d, want 200", res.StatusCode)
+	}
+}
+
+// Deletion is the one irreversible operation, so it is the one bounded by
+// ownership: a service may only delete what it uploaded.
+func TestDeleteIsolatedByService(t *testing.T) {
+	ts, blobs := newTestServer(t)
+	up := upload(t, ts, pngBytes, "")
+
+	del := func(token string) int {
+		req, _ := http.NewRequest("DELETE", ts.URL+"/v1/files/"+up.ID, nil)
+		req.Header.Set("X-Service-Token", token)
+		res, err := ts.Client().Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		return res.StatusCode
+	}
+
+	// Another service holding a full token must not be able to destroy it,
+	// and gets 404 rather than 403 — it learns nothing about the id.
+	if got := del(testOtherToken); got != http.StatusNotFound {
+		t.Errorf("delete by another service: got %d, want 404", got)
+	}
+	res, _ := ts.Client().Get(ts.URL + "/f/" + up.ID)
+	res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("file must survive a foreign delete, serve got %d", res.StatusCode)
+	}
+
+	if got := del(testToken); got != http.StatusNoContent {
+		t.Errorf("delete by owning service: got %d, want 204", got)
+	}
+	if blobs.Len() != 0 {
+		t.Errorf("blob store: %d objects left, want 0", blobs.Len())
+	}
+}
+
+// The shape UC-44 depends on: the app uploads with its upload-scoped token and
+// the backend deletes with the full one. Both are the same tenant, so this must
+// work — it is the reason service names are shared rather than per-credential.
+func TestBackendDeletesWhatItsAppUploaded(t *testing.T) {
+	ts, _ := newTestServer(t)
+
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	fw, _ := mw.CreateFormFile("file", "pic.png")
+	fw.Write(pngBytes)
+	mw.Close()
+
+	req, _ := http.NewRequest("POST", ts.URL+"/v1/files", &buf)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	req.Header.Set("X-Service-Token", testUploadToken)
+	res, err := ts.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var up uploadResponse
+	json.NewDecoder(res.Body).Decode(&up)
+	res.Body.Close()
+
+	req, _ = http.NewRequest("DELETE", ts.URL+"/v1/files/"+up.ID, nil)
+	req.Header.Set("X-Service-Token", testToken)
+	res2, err := ts.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res2.Body.Close()
+	if res2.StatusCode != http.StatusNoContent {
+		t.Errorf("backend deleting its app's upload: got %d, want 204", res2.StatusCode)
 	}
 }
 
