@@ -70,6 +70,49 @@ func withAuth(tokens map[string]Token, required Scope) func(http.Handler) http.H
 	}
 }
 
+// withCORS answers browser preflights and marks responses for the configured
+// origins. An empty list disables it: native apps never need CORS, and a
+// service with no web consumer should not advertise one.
+//
+// It must wrap the mux rather than live in a route, because ServeMux matches
+// methods — an OPTIONS preflight would otherwise be answered with 405.
+func withCORS(origins []string, next http.Handler) http.Handler {
+	if len(origins) == 0 {
+		return next
+	}
+	allowed := make(map[string]bool, len(origins))
+	anyOrigin := false
+	for _, o := range origins {
+		if o == "*" {
+			anyOrigin = true
+		}
+		allowed[o] = true
+	}
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := r.Header.Get("Origin")
+		if origin == "" || !(anyOrigin || allowed[origin]) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		h := w.Header()
+		// Echo the caller's origin instead of "*": the response differs per
+		// origin, and Vary keeps caches from serving one origin's answer to
+		// another.
+		h.Set("Access-Control-Allow-Origin", origin)
+		h.Add("Vary", "Origin")
+
+		if r.Method == http.MethodOptions && r.Header.Get("Access-Control-Request-Method") != "" {
+			h.Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+			h.Set("Access-Control-Allow-Headers", "X-Service-Token, Content-Type")
+			h.Set("Access-Control-Max-Age", "86400")
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 type statusRecorder struct {
 	http.ResponseWriter
 	status int

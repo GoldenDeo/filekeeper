@@ -141,6 +141,7 @@ from a separate ("sandbox") domain, not from your app's origin.
 | `FK_ALLOWED_MIME` | images + mp4/webm | comma-separated sniffed-MIME allowlist |
 | `FK_TOKENS` | — (required) | `service:token[:scope]`, comma-separated; scope = `full` (default) \| `upload` |
 | `FK_SIGN_SECRET` | — (required, ≥32 chars) | HMAC secret for private-file URLs |
+| `FK_CORS_ORIGINS` | — (off) | browser origins allowed to call the API, comma-separated (`*` allowed) |
 | `FK_S3_ENDPOINT/REGION/BUCKET/ACCESS_KEY/SECRET_KEY/PATH_STYLE` | Garage defaults | any S3-compatible target |
 
 ## Operational notes
@@ -158,9 +159,10 @@ from a separate ("sandbox") domain, not from your app's origin.
   (`--single-node --default-bucket`, Garage ≥ 2.3.0).
 - **SVG is rejected** by default (stored-XSS vector). If you ever need it,
   sanitize server-side before allowlisting.
-- **No CORS headers** are sent: browsers can only upload directly from a page
-  on the same origin. Uploading from a web app on another origin needs a CORS
-  middleware first (native apps are unaffected).
+- **CORS is off unless `FK_CORS_ORIGINS` lists origins.** Only browser clients
+  need it; native apps are unaffected. Preflights are answered by the server
+  itself, so no OPTIONS route exists. A dev server must listen on a fixed port
+  for its origin to be nameable (Flutter: `--web-port=18080`).
 - **Nothing collects unreferenced files.** A file uploaded for a form the user
   abandoned stays forever — the owning service is responsible for deleting what
   it no longer references.

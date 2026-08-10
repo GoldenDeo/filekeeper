@@ -20,6 +20,7 @@ type Config struct {
 	AllowedMIME    map[string]bool
 	Tokens         map[string]Token // token string -> service + scope
 	SignSecret     []byte
+	CORSOrigins    []string // browser origins allowed to call the API; empty = no CORS
 }
 
 func New(cfg Config, metaStore *meta.Store, blobs blob.Store, logger *slog.Logger) http.Handler {
@@ -27,6 +28,7 @@ func New(cfg Config, metaStore *meta.Store, blobs blob.Store, logger *slog.Logge
 	addRoutes(mux, cfg, metaStore, blobs, logger)
 
 	var h http.Handler = mux
+	h = withCORS(cfg.CORSOrigins, h)
 	h = withRecover(logger, h)
 	h = withLogging(logger, h)
 	return h

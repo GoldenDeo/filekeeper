@@ -27,8 +27,9 @@ type Config struct {
 	AllowedMIME    map[string]bool
 
 	// Tokens maps a bearer token to the service it speaks for and its scope.
-	Tokens     map[string]Token
-	SignSecret []byte
+	Tokens      map[string]Token
+	SignSecret  []byte
+	CORSOrigins []string
 
 	S3 blob.S3Config
 }
@@ -80,6 +81,13 @@ func Load() (Config, error) {
 	}
 	if len(cfg.Tokens) == 0 {
 		return cfg, fmt.Errorf("FK_TOKENS is required (format: service:token,service2:token2)")
+	}
+
+	// FK_CORS_ORIGINS="http://localhost:18080,https://app.example.com" ("*" allowed).
+	for _, o := range strings.Split(os.Getenv("FK_CORS_ORIGINS"), ",") {
+		if o = strings.TrimSpace(o); o != "" {
+			cfg.CORSOrigins = append(cfg.CORSOrigins, strings.TrimSuffix(o, "/"))
+		}
 	}
 
 	secret := os.Getenv("FK_SIGN_SECRET")

@@ -19,6 +19,10 @@ FK_MAX_UPLOAD_BYTES=104857600
 FK_TOKENS=demo:tok_$(openssl rand -hex 24),demo-app:tok_$(openssl rand -hex 24):upload
 # Shared secret for signed private-file URLs (services holding it can sign locally).
 FK_SIGN_SECRET=$(openssl rand -hex 32)
+# Browser origins allowed to call the API (comma-separated; empty = no CORS at
+# all). Only web apps need this — native ones are unaffected. A dev server must
+# listen on a fixed port for its origin to be nameable here.
+FK_CORS_ORIGINS=http://localhost:18080
 
 # --- Garage S3 (also used by imgproxy) ---
 S3_BUCKET=blobs

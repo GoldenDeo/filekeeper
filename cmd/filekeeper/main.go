@@ -64,6 +64,7 @@ func run(ctx context.Context) error {
 		AllowedMIME:    cfg.AllowedMIME,
 		Tokens:         tokens,
 		SignSecret:     cfg.SignSecret,
+		CORSOrigins:    cfg.CORSOrigins,
 	}, metaStore, blobs, logger)
 
 	srv := &http.Server{

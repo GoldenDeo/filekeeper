@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/GoldenDeo/filekeeper/internal/blob"
@@ -341,6 +342,99 @@ func TestUploadScopeMayOnlyUpload(t *testing.T) {
 	if res.StatusCode != http.StatusOK {
 		t.Errorf("file after refused delete: got %d, want 200", res.StatusCode)
 	}
+}
+
+func TestCORS(t *testing.T) {
+	const allowedOrigin = "http://localhost:18080"
+	dir := t.TempDir()
+	metaStore, err := meta.Open(filepath.Join(dir, "cors.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { metaStore.Close() })
+
+	newServer := func(origins []string) *httptest.Server {
+		h := New(Config{
+			PublicBaseURL:  "http://files.test",
+			SpoolDir:       dir,
+			MaxUploadBytes: 1 << 20,
+			AllowedMIME:    map[string]bool{"image/png": true},
+			Tokens:         map[string]Token{testToken: {Service: "testsvc", Scope: ScopeFull}},
+			SignSecret:     []byte("0123456789abcdef0123456789abcdef"),
+			CORSOrigins:    origins,
+		}, metaStore, blob.NewMemory(), slog.New(slog.DiscardHandler))
+		ts := httptest.NewServer(h)
+		t.Cleanup(ts.Close)
+		return ts
+	}
+
+	t.Run("preflight is answered", func(t *testing.T) {
+		ts := newServer([]string{allowedOrigin})
+		req, _ := http.NewRequest("OPTIONS", ts.URL+"/v1/files", nil)
+		req.Header.Set("Origin", allowedOrigin)
+		req.Header.Set("Access-Control-Request-Method", "POST")
+		req.Header.Set("Access-Control-Request-Headers", "X-Service-Token")
+		res, err := ts.Client().Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		// Without the middleware ServeMux would answer 405: no OPTIONS route.
+		if res.StatusCode != http.StatusNoContent {
+			t.Fatalf("preflight: got %d, want 204", res.StatusCode)
+		}
+		if got := res.Header.Get("Access-Control-Allow-Origin"); got != allowedOrigin {
+			t.Errorf("allow-origin: got %q, want %q", got, allowedOrigin)
+		}
+		if h := res.Header.Get("Access-Control-Allow-Headers"); !strings.Contains(h, "X-Service-Token") {
+			t.Errorf("allow-headers must cover the token header, got %q", h)
+		}
+	})
+
+	t.Run("real request carries the header", func(t *testing.T) {
+		ts := newServer([]string{allowedOrigin})
+		req, _ := http.NewRequest("GET", ts.URL+"/healthz", nil)
+		req.Header.Set("Origin", allowedOrigin)
+		res, err := ts.Client().Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		if got := res.Header.Get("Access-Control-Allow-Origin"); got != allowedOrigin {
+			t.Errorf("allow-origin: got %q, want %q", got, allowedOrigin)
+		}
+		if v := res.Header.Get("Vary"); !strings.Contains(v, "Origin") {
+			t.Errorf("Vary must mention Origin, got %q", v)
+		}
+	})
+
+	t.Run("unknown origin gets nothing", func(t *testing.T) {
+		ts := newServer([]string{allowedOrigin})
+		req, _ := http.NewRequest("GET", ts.URL+"/healthz", nil)
+		req.Header.Set("Origin", "http://evil.test")
+		res, err := ts.Client().Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		if got := res.Header.Get("Access-Control-Allow-Origin"); got != "" {
+			t.Errorf("allow-origin for unknown origin: got %q, want empty", got)
+		}
+	})
+
+	t.Run("disabled by default", func(t *testing.T) {
+		ts := newServer(nil)
+		req, _ := http.NewRequest("GET", ts.URL+"/healthz", nil)
+		req.Header.Set("Origin", allowedOrigin)
+		res, err := ts.Client().Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		if got := res.Header.Get("Access-Control-Allow-Origin"); got != "" {
+			t.Errorf("CORS off: got %q, want empty", got)
+		}
+	})
 }
 
 func TestScopeAllows(t *testing.T) {
