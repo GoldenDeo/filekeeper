@@ -11,6 +11,13 @@ import (
 	"github.com/GoldenDeo/filekeeper/internal/blob"
 )
 
+// Token is one parsed FK_TOKENS entry. Scope is "full" or "upload"; the
+// server package turns it into its own enum.
+type Token struct {
+	Service string
+	Scope   string
+}
+
 type Config struct {
 	Addr          string
 	PublicBaseURL string // external URL files are served from, no trailing slash
@@ -19,8 +26,8 @@ type Config struct {
 	MaxUploadBytes int64
 	AllowedMIME    map[string]bool
 
-	// Tokens maps a bearer token to the calling service's name.
-	Tokens     map[string]string
+	// Tokens maps a bearer token to the service it speaks for and its scope.
+	Tokens     map[string]Token
 	SignSecret []byte
 
 	S3 blob.S3Config
@@ -33,7 +40,7 @@ func Load() (Config, error) {
 		DataDir:        env("FK_DATA_DIR", "./data"),
 		MaxUploadBytes: envInt64("FK_MAX_UPLOAD_BYTES", 100<<20),
 		AllowedMIME:    map[string]bool{},
-		Tokens:         map[string]string{},
+		Tokens:         map[string]Token{},
 		S3: blob.S3Config{
 			Endpoint:  os.Getenv("FK_S3_ENDPOINT"),
 			Region:    env("FK_S3_REGION", "garage"),
@@ -52,16 +59,24 @@ func Load() (Config, error) {
 		}
 	}
 
-	// FK_TOKENS="billing:tok_abc,gallery:tok_def"
-	for _, pair := range strings.Split(os.Getenv("FK_TOKENS"), ",") {
-		if pair = strings.TrimSpace(pair); pair == "" {
+	// FK_TOKENS="billing:tok_abc,gallery-app:tok_def:upload"
+	// Scope defaults to full when omitted.
+	for _, entry := range strings.Split(os.Getenv("FK_TOKENS"), ",") {
+		if entry = strings.TrimSpace(entry); entry == "" {
 			continue
 		}
-		service, token, ok := strings.Cut(pair, ":")
-		if !ok || service == "" || token == "" {
-			return cfg, fmt.Errorf("FK_TOKENS: bad entry %q, want service:token", pair)
+		parts := strings.Split(entry, ":")
+		if len(parts) < 2 || len(parts) > 3 || parts[0] == "" || parts[1] == "" {
+			return cfg, fmt.Errorf("FK_TOKENS: bad entry %q, want service:token[:scope]", entry)
 		}
-		cfg.Tokens[token] = service
+		scope := "full"
+		if len(parts) == 3 {
+			scope = parts[2]
+		}
+		if scope != "full" && scope != "upload" {
+			return cfg, fmt.Errorf("FK_TOKENS: unknown scope %q in %q, want full or upload", scope, entry)
+		}
+		cfg.Tokens[parts[1]] = Token{Service: parts[0], Scope: scope}
 	}
 	if len(cfg.Tokens) == 0 {
 		return cfg, fmt.Errorf("FK_TOKENS is required (format: service:token,service2:token2)")

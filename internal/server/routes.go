@@ -10,13 +10,16 @@ import (
 
 // addRoutes is the single place the whole API surface is visible.
 func addRoutes(mux *http.ServeMux, cfg Config, metaStore *meta.Store, blobs blob.Store, logger *slog.Logger) {
-	auth := withAuth(cfg.Tokens)
+	// Upload is reachable by upload-scoped tokens too (client apps); every
+	// endpoint that reads or destroys demands a full token.
+	canUpload := withAuth(cfg.Tokens, ScopeUpload)
+	canManage := withAuth(cfg.Tokens, ScopeFull)
 
 	// Service API (authenticated with X-Service-Token).
-	mux.Handle("POST /v1/files", auth(handleUpload(cfg, metaStore, blobs, logger)))
-	mux.Handle("GET /v1/files/{id}", auth(handleGetMeta(metaStore)))
-	mux.Handle("DELETE /v1/files/{id}", auth(handleDelete(metaStore, blobs, logger)))
-	mux.Handle("POST /v1/files/{id}/sign", auth(handleSign(cfg, metaStore)))
+	mux.Handle("POST /v1/files", canUpload(handleUpload(cfg, metaStore, blobs, logger)))
+	mux.Handle("GET /v1/files/{id}", canManage(handleGetMeta(metaStore)))
+	mux.Handle("DELETE /v1/files/{id}", canManage(handleDelete(metaStore, blobs, logger)))
+	mux.Handle("POST /v1/files/{id}/sign", canManage(handleSign(cfg, metaStore)))
 
 	// Public serving (access to private files via signed URLs).
 	mux.Handle("GET /f/{id}", handleServe(cfg, metaStore, blobs, logger))

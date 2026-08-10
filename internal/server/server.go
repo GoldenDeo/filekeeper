@@ -18,7 +18,7 @@ type Config struct {
 	SpoolDir       string // temp dir for upload spooling, same volume as DataDir
 	MaxUploadBytes int64
 	AllowedMIME    map[string]bool
-	Tokens         map[string]string // token -> service name
+	Tokens         map[string]Token // token string -> service + scope
 	SignSecret     []byte
 }
 

@@ -13,13 +13,40 @@ type ctxKey int
 
 const ctxService ctxKey = iota
 
+// Scope bounds what a token may do. A token that ships inside a client app is
+// reachable by anyone holding the binary, so it must not be able to read or
+// destroy anything — only add.
+type Scope string
+
+const (
+	// ScopeFull may upload, read metadata, sign and delete: for backends.
+	ScopeFull Scope = "full"
+	// ScopeUpload may only create files.
+	ScopeUpload Scope = "upload"
+)
+
+// allows reports whether a token carrying this scope may reach an endpoint
+// requiring `required`.
+func (s Scope) allows(required Scope) bool {
+	return s == ScopeFull || s == required
+}
+
+// Token is a configured credential: which service it speaks for, and how far
+// it reaches.
+type Token struct {
+	Service string
+	Scope   Scope
+}
+
 // serviceFrom returns the authenticated service name set by withAuth.
 func serviceFrom(ctx context.Context) string {
 	s, _ := ctx.Value(ctxService).(string)
 	return s
 }
 
-func withAuth(tokens map[string]string) func(http.Handler) http.Handler {
+// withAuth authenticates X-Service-Token and enforces that its scope reaches
+// the endpoint it guards.
+func withAuth(tokens map[string]Token, required Scope) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			got := r.Header.Get("X-Service-Token")
@@ -27,9 +54,14 @@ func withAuth(tokens map[string]string) func(http.Handler) http.Handler {
 				writeError(w, http.StatusUnauthorized, "missing X-Service-Token")
 				return
 			}
-			for token, service := range tokens {
+			for token, t := range tokens {
 				if subtle.ConstantTimeCompare([]byte(got), []byte(token)) == 1 {
-					next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ctxService, service)))
+					if !t.Scope.allows(required) {
+						writeError(w, http.StatusForbidden,
+							"token scope "+string(t.Scope)+" may not use this endpoint")
+						return
+					}
+					next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ctxService, t.Service)))
 					return
 				}
 			}

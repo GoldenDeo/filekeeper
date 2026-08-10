@@ -47,9 +47,16 @@ curl http://localhost:8090/f/f_…          # serves the file
 All `/v1/*` endpoints require `X-Service-Token: <token>` (one token per
 consuming service, configured in `FK_TOKENS`). `/f/{id}` is public.
 
+Each token carries a **scope**: `full` (default) reaches every endpoint, while
+`upload` may only `POST /v1/files` — anything that reads or destroys answers
+`403`. Give backends a full token and client apps an upload-scoped one: a token
+shipped inside an app is readable by anyone holding the binary, and an
+upload-scoped leak costs disk space, not data. Note there is no per-service
+ownership check — a full token reaches **every** file of **every** service.
+
 | Method & path             | What it does |
 |---------------------------|--------------|
-| `POST /v1/files`          | multipart upload; parts: `file` (required), `visibility` = `public` (default) \| `private`. Returns `201` with the file record + `url`. `413` over limit, `415` for disallowed type. |
+| `POST /v1/files`          | multipart upload; parts: `file` (required), `visibility` = `public` (default) \| `private`. Returns `201` with the file record + `url`. `413` over limit, `415` for disallowed type. Open to `upload` and `full` scopes. |
 | `GET /f/{id}`             | serve the file. Supports `Range`, `If-None-Match`/`ETag` (=sha256), correct `Content-Type`, `nosniff`, inline for media / attachment for the rest. Private files need `?exp=&sig=`. |
 | `GET /v1/files/{id}`      | metadata JSON. |
 | `POST /v1/files/{id}/sign?ttl=300` | mint a signed URL for a private file (ttl ≤ 86400 s). |
@@ -58,10 +65,12 @@ consuming service, configured in `FK_TOKENS`). `/f/{id}` is public.
 
 ### Integrating a microservice
 
-1. Get a token: add `myservice:tok_…` to `FK_TOKENS`.
+1. Get a token: add `myservice:tok_…` to `FK_TOKENS`. If the file is uploaded
+   by your client app rather than your backend, give the app its own
+   upload-scoped token: `myservice-app:tok_…:upload`.
 2. On upload, `POST /v1/files`, store **only** `id` from the response.
 3. To show the file, render `<base>/f/<id>` (public) or sign it (private).
-4. On entity deletion, `DELETE /v1/files/<id>`.
+4. On entity deletion, `DELETE /v1/files/<id>` (needs the full token).
 
 Official clients (both compute signed/imgproxy URLs locally, zero extra HTTP):
 
@@ -130,7 +139,7 @@ from a separate ("sandbox") domain, not from your app's origin.
 | `FK_DATA_DIR` | `./data` | SQLite db + upload spool |
 | `FK_MAX_UPLOAD_BYTES` | `104857600` (100 MB) | per-file limit |
 | `FK_ALLOWED_MIME` | images + mp4/webm | comma-separated sniffed-MIME allowlist |
-| `FK_TOKENS` | — (required) | `service:token,service2:token2` |
+| `FK_TOKENS` | — (required) | `service:token[:scope]`, comma-separated; scope = `full` (default) \| `upload` |
 | `FK_SIGN_SECRET` | — (required, ≥32 chars) | HMAC secret for private-file URLs |
 | `FK_S3_ENDPOINT/REGION/BUCKET/ACCESS_KEY/SECRET_KEY/PATH_STYLE` | Garage defaults | any S3-compatible target |
 
@@ -149,6 +158,12 @@ from a separate ("sandbox") domain, not from your app's origin.
   (`--single-node --default-bucket`, Garage ≥ 2.3.0).
 - **SVG is rejected** by default (stored-XSS vector). If you ever need it,
   sanitize server-side before allowlisting.
+- **No CORS headers** are sent: browsers can only upload directly from a page
+  on the same origin. Uploading from a web app on another origin needs a CORS
+  middleware first (native apps are unaffected).
+- **Nothing collects unreferenced files.** A file uploaded for a form the user
+  abandoned stays forever — the owning service is responsible for deleting what
+  it no longer references.
 
 ## Extension path (deliberately cheap)
 

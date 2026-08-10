@@ -12,8 +12,11 @@ cat > .env <<EOF
 FK_HOST_PORT=8090
 FK_PUBLIC_BASE_URL=http://localhost:8090
 FK_MAX_UPLOAD_BYTES=104857600
-# Service tokens: service-name:token, comma-separated. Add one per microservice.
-FK_TOKENS=demo:tok_$(openssl rand -hex 24)
+# Service tokens: service:token[:scope], comma-separated. Add one per microservice.
+# Scope is full (default: upload+read+sign+delete) or upload (create only) —
+# give client apps an upload-scoped token, so a leaked one can add but never
+# read or destroy.
+FK_TOKENS=demo:tok_$(openssl rand -hex 24),demo-app:tok_$(openssl rand -hex 24):upload
 # Shared secret for signed private-file URLs (services holding it can sign locally).
 FK_SIGN_SECRET=$(openssl rand -hex 32)
 

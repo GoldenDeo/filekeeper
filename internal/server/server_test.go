@@ -24,7 +24,10 @@ var pngBytes = []byte{
 	0x0d, 0x0a, 0x2d, 0xb4, 0, 0, 0, 0, 'I', 'E', 'N', 'D', 0xae, 0x42, 0x60, 0x82,
 }
 
-const testToken = "tok_test"
+const (
+	testToken       = "tok_test"
+	testUploadToken = "tok_upload_only"
+)
 
 func newTestServer(t *testing.T) (*httptest.Server, *blob.Memory) {
 	t.Helper()
@@ -41,8 +44,11 @@ func newTestServer(t *testing.T) (*httptest.Server, *blob.Memory) {
 		SpoolDir:       dir,
 		MaxUploadBytes: 1 << 20,
 		AllowedMIME:    map[string]bool{"image/png": true, "image/gif": true},
-		Tokens:         map[string]string{testToken: "testsvc"},
-		SignSecret:     []byte("0123456789abcdef0123456789abcdef"),
+		Tokens: map[string]Token{
+			testToken:       {Service: "testsvc", Scope: ScopeFull},
+			testUploadToken: {Service: "testapp", Scope: ScopeUpload},
+		},
+		SignSecret: []byte("0123456789abcdef0123456789abcdef"),
 	}, metaStore, blobs, slog.New(slog.DiscardHandler))
 
 	ts := httptest.NewServer(h)
@@ -271,6 +277,84 @@ func TestAuthRequired(t *testing.T) {
 		res.Body.Close()
 		if res.StatusCode != http.StatusUnauthorized {
 			t.Errorf("%s %s token=%q: got %d, want 401", tc.method, tc.path, tc.token, res.StatusCode)
+		}
+	}
+}
+
+// An upload-scoped token is the one that ships inside client apps: it must be
+// able to add files and nothing else, so leaking it costs storage, not data.
+func TestUploadScopeMayOnlyUpload(t *testing.T) {
+	ts, _ := newTestServer(t)
+
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	fw, _ := mw.CreateFormFile("file", "pic.png")
+	fw.Write(pngBytes)
+	mw.Close()
+
+	req, _ := http.NewRequest("POST", ts.URL+"/v1/files", &buf)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	req.Header.Set("X-Service-Token", testUploadToken)
+	res, err := ts.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(res.Body)
+		t.Fatalf("upload with upload scope: got %d, body %s", res.StatusCode, body)
+	}
+	var up uploadResponse
+	if err := json.NewDecoder(res.Body).Decode(&up); err != nil {
+		t.Fatal(err)
+	}
+	if up.Service != "testapp" {
+		t.Errorf("service: got %q, want testapp", up.Service)
+	}
+
+	// Everything that reads or destroys is closed to it.
+	for _, tc := range []struct{ method, path string }{
+		{"GET", "/v1/files/" + up.ID},
+		{"DELETE", "/v1/files/" + up.ID},
+		{"POST", "/v1/files/" + up.ID + "/sign"},
+	} {
+		req, _ := http.NewRequest(tc.method, ts.URL+tc.path, nil)
+		req.Header.Set("X-Service-Token", testUploadToken)
+		res, err := ts.Client().Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		if res.StatusCode != http.StatusForbidden {
+			t.Errorf("%s %s with upload scope: got %d, want 403", tc.method, tc.path, res.StatusCode)
+		}
+	}
+
+	// The file survived the refused delete.
+	req, _ = http.NewRequest("GET", ts.URL+"/v1/files/"+up.ID, nil)
+	req.Header.Set("X-Service-Token", testToken)
+	res, err = ts.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Errorf("file after refused delete: got %d, want 200", res.StatusCode)
+	}
+}
+
+func TestScopeAllows(t *testing.T) {
+	for _, tc := range []struct {
+		have, required Scope
+		want           bool
+	}{
+		{ScopeFull, ScopeFull, true},
+		{ScopeFull, ScopeUpload, true},
+		{ScopeUpload, ScopeUpload, true},
+		{ScopeUpload, ScopeFull, false},
+	} {
+		if got := tc.have.allows(tc.required); got != tc.want {
+			t.Errorf("%s.allows(%s): got %v, want %v", tc.have, tc.required, got, tc.want)
 		}
 	}
 }

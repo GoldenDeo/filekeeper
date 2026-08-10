@@ -47,7 +47,7 @@ func newStack(t *testing.T) *Client {
 		SpoolDir:       dir,
 		MaxUploadBytes: 1 << 20,
 		AllowedMIME:    map[string]bool{"image/png": true},
-		Tokens:         map[string]string{testToken: "clientsvc"},
+		Tokens:         map[string]server.Token{testToken: {Service: "clientsvc", Scope: server.ScopeFull}},
 		SignSecret:     []byte(testSecret),
 	}, metaStore, blob.NewMemory(), slog.New(slog.DiscardHandler)))
 	t.Cleanup(ts.Close)

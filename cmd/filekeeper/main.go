@@ -52,12 +52,17 @@ func run(ctx context.Context) error {
 		return err
 	}
 
+	tokens := make(map[string]server.Token, len(cfg.Tokens))
+	for token, t := range cfg.Tokens {
+		tokens[token] = server.Token{Service: t.Service, Scope: server.Scope(t.Scope)}
+	}
+
 	handler := server.New(server.Config{
 		PublicBaseURL:  cfg.PublicBaseURL,
 		SpoolDir:       spoolDir,
 		MaxUploadBytes: cfg.MaxUploadBytes,
 		AllowedMIME:    cfg.AllowedMIME,
-		Tokens:         cfg.Tokens,
+		Tokens:         tokens,
 		SignSecret:     cfg.SignSecret,
 	}, metaStore, blobs, logger)
 
