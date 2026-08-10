@@ -9,8 +9,8 @@ jobs:
   go:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       - run: go vet ./...
@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     container: php:8.5-cli
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Lint
         run: find clients/php -name '*.php' -exec php -l {} +
       - name: Instantiate
@@ -38,7 +38,7 @@ jobs:
   smoke:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Generate .env
         run: sh scripts/gen-env.sh
       - name: Start stack
