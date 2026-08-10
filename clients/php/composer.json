@@ -1,0 +1,16 @@
+{
+    "name": "goldendeo/filekeeper-client",
+    "description": "PHP client for the filekeeper file service",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.1",
+        "ext-curl": "*",
+        "ext-json": "*"
+    },
+    "autoload": {
+        "psr-4": {
+            "Filekeeper\\": "src/"
+        }
+    }
+}

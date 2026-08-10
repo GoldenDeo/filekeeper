@@ -63,6 +63,39 @@ consuming service, configured in `FK_TOKENS`). `/f/{id}` is public.
 3. To show the file, render `<base>/f/<id>` (public) or sign it (private).
 4. On entity deletion, `DELETE /v1/files/<id>`.
 
+Official clients (both compute signed/imgproxy URLs locally, zero extra HTTP):
+
+**Go** — `go get github.com/GoldenDeo/filekeeper/client`
+
+```go
+fk := client.New("http://filekeeper:8080", token,
+	client.WithSignSecret(signSecret),
+	client.WithImgproxy("http://imgproxy:8080", imgKeyHex, imgSaltHex, "blobs"))
+
+f, err := fk.Upload(ctx, reader, client.UploadOptions{Filename: "a.png", Private: true})
+url, _ := fk.SignedURL(f.ID, 5*time.Minute)
+thumb, _ := fk.ImageURL(f.SHA256, "rs:fill:300:300/f:webp")
+err = fk.Delete(ctx, f.ID)
+```
+
+**PHP** (≥8.1, ext-curl; `clients/php`, PSR-4 `Filekeeper\`)
+
+```php
+$fk = new Filekeeper\Filekeeper(
+    baseUrl: 'http://filekeeper:8080', token: $token,
+    signSecret: $signSecret,
+    imgproxyUrl: 'http://imgproxy:8080', imgproxyKey: $keyHex, imgproxySalt: $saltHex,
+);
+$f = $fk->upload('/path/a.png', private: true);   // streams from disk
+$url = $fk->signedUrl($f['id'], 300);
+$thumb = $fk->imageUrl($f['sha256'], 'rs:fill:300:300/f:webp');
+$fk->delete($f['id']);
+```
+
+Typed errors on both sides: `ErrNotFound`/`NotFoundException`,
+`ErrTooLarge`/`TooLargeException`, etc. Live smoke test:
+`clients/php/examples/smoke.php`.
+
 ### Signed URLs for private files (no HTTP call needed)
 
 Any service holding `FK_SIGN_SECRET` can sign locally:
