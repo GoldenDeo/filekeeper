@@ -78,7 +78,7 @@ thumb, _ := fk.ImageURL(f.SHA256, "rs:fill:300:300/f:webp")
 err = fk.Delete(ctx, f.ID)
 ```
 
-**PHP** (≥8.1, ext-curl; `clients/php`, PSR-4 `Filekeeper\`)
+**PHP** (≥8.5, ext-curl; `clients/php`, PSR-4 `Filekeeper\`)
 
 ```php
 $fk = new Filekeeper\Filekeeper(

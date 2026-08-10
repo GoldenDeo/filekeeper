@@ -13,9 +13,11 @@ namespace Filekeeper;
  *
  * Requires ext-curl. No other dependencies.
  */
-final class Filekeeper
+final readonly class Filekeeper
 {
     private string $baseUrl;
+
+    private ?string $imgproxyUrl;
 
     /**
      * @param string      $baseUrl        e.g. "http://filekeeper:8080"
@@ -30,7 +32,7 @@ final class Filekeeper
         string $baseUrl,
         private string $token,
         #[\SensitiveParameter] private ?string $signSecret = null,
-        private ?string $imgproxyUrl = null,
+        ?string $imgproxyUrl = null,
         #[\SensitiveParameter] private ?string $imgproxyKey = null,
         #[\SensitiveParameter] private ?string $imgproxySalt = null,
         private string $imgproxyBucket = 'blobs',
