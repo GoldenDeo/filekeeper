@@ -57,11 +57,11 @@ Each token carries a **scope**: `full` (default) reaches every endpoint, while
 `403`. A token shipped inside an app is readable by anyone holding the binary,
 so an upload-scoped leak costs disk space, not data.
 
-**Deletion is bounded by ownership**: a service may only delete files it
-uploaded; someone else's file answers `404` (not `403`, so ids cannot be
-probed). Reading is not bounded — a full token can read the metadata of any
-file, and `sign` any private one. That asymmetry is deliberate: deletion is
-irreversible, while public files are already served to the world at `/f/{id}`.
+**The whole `/v1/files/{id}` surface is bounded by ownership**: a service may
+only read, sign or delete files it uploaded. Someone else's file answers `404`
+rather than `403`, so ids cannot be probed. Public serving stays open — `/f/{id}`
+carries no token and is meant for the world; ownership guards the API, not the
+bytes.
 
 | Method & path             | What it does |
 |---------------------------|--------------|
