@@ -1,0 +1,45 @@
+version: 2
+
+# Той самий уклад, що в story-tail: єдиний канал PR у репо — механічні
+# оновлення залежностей. CI (go + php lint + full-stack smoke) каже
+# «зелено» ДО мержу; робота далі комітиться прямо в main.
+#
+# PHP-клієнт секції не має: в нього нуль пакетних залежностей (лише php
+# та розширення), депендаботу там нічого оновлювати. Підйом floor самого
+# PHP — ручна задача з розбором deprecated, не кнопка «змержити».
+updates:
+
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    groups:
+      # Дрібні оновлення — одним PR: пачка «patch bump» = одне рішення.
+      go-minor-patch:
+        update-types: [minor, patch]
+    ignore:
+      # Major — ручний захід з розбором, не мерж.
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
+
+  # Dockerfile: golang:1.26-alpine (build) і distroless/static (runtime).
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 2
+
+  # Пінені образи стека в docker-compose.yml: garage v2.3.0, imgproxy v4.
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 2
+
+  # Версії екшенів (actions/checkout тощо) — щоб тихо не застарівали.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 2
