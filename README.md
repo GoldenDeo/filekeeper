@@ -74,6 +74,9 @@ bytes.
 
 ### Integrating a microservice
 
+> Step-by-step walkthrough and a symptom-indexed list of traps (Ukrainian):
+> [`cookbook/`](cookbook/README.md).
+
 1. Get a token: add `myservice:tok_…` to `FK_TOKENS`. If the file is uploaded
    by your client app rather than your backend, add a second token under the
    **same service name**: `myservice:tok_…:upload`. Same tenant, narrower
